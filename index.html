@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Ridgeline Circuit — 3D Car Sim</title>
 <style>
   :root{
@@ -12,8 +13,9 @@
     --signal-red:#e3543f;
     --track-green:#33613f;
   }
-  html,body{margin:0;padding:0;height:100%;background:var(--ink);overflow:hidden;font-family:'Courier New',monospace;}
-  canvas{display:block;}
+  html,body{margin:0;padding:0;height:100%;background:var(--ink);overflow:hidden;font-family:'Courier New',monospace;
+    overscroll-behavior:none; touch-action:none; -webkit-user-select:none; user-select:none;}
+  canvas{display:block; touch-action:none;}
 
   #hud{
     position:fixed; inset:0; pointer-events:none; color:var(--paper);
@@ -100,6 +102,41 @@
     font-size:15px; font-weight:bold; letter-spacing:6px; color:var(--signal-red); opacity:0;
     transition:opacity .1s; text-transform:uppercase;
   }
+
+  /* ---------- TOUCH CONTROLS ---------- */
+  #touchControls{ display:none; }
+  .touchZone{
+    position:fixed; bottom:0; pointer-events:none;
+    display:flex; align-items:flex-end; gap:14px; padding:0 16px 18px;
+    z-index:8;
+  }
+  #touchLeft{ left:0; }
+  #touchRight{ right:0; }
+  .ctrlBtn{
+    pointer-events:all; touch-action:none; -webkit-user-select:none; user-select:none;
+    -webkit-tap-highlight-color:transparent;
+    width:64px; height:64px; border-radius:50%;
+    border:2px solid var(--amber); background:rgba(13,15,18,0.55); color:var(--amber);
+    font-family:'Courier New',monospace; font-size:24px; display:flex; align-items:center; justify-content:center;
+    opacity:.8; transition:background .1s, opacity .1s;
+  }
+  .ctrlBtn.active{ background:rgba(255,180,84,0.35); opacity:1; }
+  .ctrlBtn.big{ width:76px; height:76px; font-size:28px; }
+  .ctrlBtn.small{ width:46px; height:46px; font-size:11px; letter-spacing:1px; margin-bottom:14px; }
+  #btnReset{
+    position:fixed; top:16px; right:16px; z-index:8; pointer-events:all; touch-action:none;
+    -webkit-tap-highlight-color:transparent;
+    background:rgba(13,15,18,0.55); border:1px solid var(--amber); color:var(--amber);
+    font-family:'Courier New',monospace; font-size:10px; letter-spacing:2px;
+    padding:7px 12px; text-transform:uppercase; opacity:.8; display:none;
+  }
+
+  /* show touch UI on touch/coarse-pointer devices */
+  @media (pointer:coarse){
+    #touchControls{ display:block; }
+    #btnReset{ display:block; }
+    #help{ display:none; }
+  }
 </style>
 </head>
 <body>
@@ -109,7 +146,7 @@
   <p>A minimal arcade car simulator — accelerate, steer, and drift your way around the mountain loop. Built with real-time slip-based handling, not a scripted path.</p>
  <p>Created by NMD</p>
   <button id="startbtn">Start Engine</button>
-  <p style="margin-top:22px;">W/↑ throttle &nbsp;·&nbsp; S/↓ brake-reverse &nbsp;·&nbsp; A D / ←→ steer &nbsp;·&nbsp; Space handbrake &nbsp;·&nbsp; R reset</p>
+  <p id="introControls" style="margin-top:22px;">W/↑ throttle &nbsp;·&nbsp; S/↓ brake-reverse &nbsp;·&nbsp; A D / ←→ steer &nbsp;·&nbsp; Space handbrake &nbsp;·&nbsp; R reset</p>
 </div>
 <div id="fade"></div>
 <div id="impactFlash"></div>
@@ -130,6 +167,19 @@
     </div>
   </div>
   <div id="help"><b>Controls</b><br>W/S throttle+brake · A/D steer<br>Space handbrake · R reset car</div>
+</div>
+
+<button id="btnReset">Reset</button>
+<div id="touchControls">
+  <div id="touchLeft" class="touchZone">
+    <button id="btnLeft" class="ctrlBtn">&#9664;</button>
+    <button id="btnRight" class="ctrlBtn">&#9654;</button>
+  </div>
+  <div id="touchRight" class="touchZone">
+    <button id="btnHandbrake" class="ctrlBtn small">HB</button>
+    <button id="btnBack" class="ctrlBtn">&#9660;</button>
+    <button id="btnFwd" class="ctrlBtn big">&#9650;</button>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -1031,6 +1081,37 @@ window.addEventListener('keyup', e=>{
   if(['ArrowRight','d','D'].includes(e.key)) input.right = false;
   if(e.code === 'Space') input.brake = false;
 });
+
+// ---------- TOUCH / ON-SCREEN CONTROLS ----------
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 || window.matchMedia('(pointer:coarse)').matches;
+if(isTouchDevice){
+  const ic = document.getElementById('introControls');
+  if(ic) ic.textContent = 'Use the on-screen wheel and pedals to drive · Reset button in the top-right corner';
+}
+
+function bindHoldButton(id, onDown, onUp){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const down = e=>{ e.preventDefault(); el.classList.add('active'); onDown(); };
+  const up = e=>{ e.preventDefault(); el.classList.remove('active'); onUp(); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerleave', up);
+  el.addEventListener('contextmenu', e=>e.preventDefault());
+}
+
+bindHoldButton('btnFwd',  ()=>input.fwd=true,   ()=>input.fwd=false);
+bindHoldButton('btnBack', ()=>input.back=true,  ()=>input.back=false);
+bindHoldButton('btnLeft', ()=>input.left=true,  ()=>input.left=false);
+bindHoldButton('btnRight',()=>input.right=true, ()=>input.right=false);
+bindHoldButton('btnHandbrake', ()=>input.brake=true, ()=>input.brake=false);
+
+const resetBtn = document.getElementById('btnReset');
+if(resetBtn){
+  resetBtn.addEventListener('pointerdown', e=>{ e.preventDefault(); resetCar(); });
+  resetBtn.addEventListener('contextmenu', e=>e.preventDefault());
+}
 
 function resetCar(){
   carState.pos.copy(startPos);
